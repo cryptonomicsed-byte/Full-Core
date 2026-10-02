@@ -313,6 +313,59 @@ app.put('/api/settings', async (request, reply) => {
 });
 
 /**
+ * Stripe Checkout Routes
+ */
+app.get('/api/stripe/checkout', async (request, reply) => {
+  const query = request.query as Record<string, string>;
+  const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+
+  if (!stripeSecretKey) {
+    return reply.status(503).send({
+      success: false,
+      error: 'Stripe not configured. Set STRIPE_SECRET_KEY in environment.'
+    });
+  }
+
+  // Dynamic import stripe for server-side only
+  const Stripe = (await import('stripe')).default;
+  const stripe = new Stripe(stripeSecretKey);
+
+  const priceMap: Record<string, string> = {
+    pro_monthly: process.env.STRIPE_PRICE_PRO_MONTHLY || '',
+    pro_annual: process.env.STRIPE_PRICE_PRO_ANNUAL || '',
+    enterprise_monthly: process.env.STRIPE_PRICE_ENTERPRISE_MONTHLY || '',
+    enterprise_annual: process.env.STRIPE_PRICE_ENTERPRISE_ANNUAL || '',
+  };
+
+  try {
+    let priceId: string | undefined;
+
+    if (query.tier) {
+      const billing = query.billing || 'monthly';
+      priceId = priceMap[`${query.tier}_${billing}`];
+    }
+
+    if (!priceId) {
+      return reply.status(400).send({ error: 'Invalid checkout parameters' });
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      mode: 'subscription',
+      payment_method_types: ['card'],
+      line_items: [{ price: priceId, quantity: 1 }],
+      success_url: `${process.env.APP_URL || 'http://localhost:3001'}/#/subscriptions?success=true`,
+      cancel_url: `${process.env.APP_URL || 'http://localhost:3001'}/#/subscriptions?canceled=true`,
+      metadata: { userId: query.userId || '' },
+    });
+
+    return reply.redirect(303, session.url!);
+  } catch (err) {
+    console.error('Stripe checkout error:', err);
+    return reply.status(500).send({ error: 'Failed to create checkout session' });
+  }
+});
+
+/**
  * Error handler
  */
 app.setErrorHandler((error, request, reply) => {

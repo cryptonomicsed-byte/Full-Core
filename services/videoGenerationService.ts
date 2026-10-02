@@ -313,3 +313,18 @@ class VideoGenerationService {
 }
 
 export const videoGenerationService = new VideoGenerationService();
+
+export async function generateVideo(
+  prompt: string,
+  provider: string,
+  onComplete?: (url: string) => void
+): Promise<GeneratedVideo> {
+  const video = await videoGenerationService.generate({
+    prompt,
+    provider,
+  } as any);
+  if (video.url && onComplete) {
+    onComplete(video.url);
+  }
+  return video;
+}

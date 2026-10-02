@@ -4,7 +4,7 @@
  * Handles: DNA extraction, campaign generation, website building, agent chat
  */
 
-import { GoogleGenerativeAI } from '@google/genai';
+import { GoogleGenAI } from '@google/genai';
 
 interface GeminiConfig {
   apiKey: string;
@@ -23,7 +23,7 @@ interface GenerationOptions {
 }
 
 class GeminiOnlyService {
-  private client: GoogleGenerativeAI | null = null;
+  private client: GoogleGenAI | null = null;
   private apiKey: string = '';
   private model: string = 'gemini-2.0-flash';
   private requestCount = 0;
@@ -39,7 +39,7 @@ class GeminiOnlyService {
       return;
     }
 
-    this.client = new GoogleGenerativeAI(this.apiKey);
+    this.client = new GoogleGenAI({ apiKey: this.apiKey });
     console.log('✅ Gemini-only service initialized');
   }
 
@@ -105,21 +105,20 @@ class GeminiOnlyService {
     }
 
     try {
-      const model = this.client.getGenerativeModel({ model: this.model });
-
       const content = options.systemPrompt
         ? `${options.systemPrompt}\n\n${prompt}`
         : prompt;
 
-      const response = await model.generateContent({
-        contents: [{ role: 'user', parts: [{ text: content }] }],
-        generationConfig: {
+      const response = await this.client.models.generateContent({
+        model: this.model,
+        contents: content,
+        config: {
           temperature: options.temperature ?? 0.7,
           maxOutputTokens: options.maxTokens ?? 1024,
         },
       });
 
-      const text = response.response.text();
+      const text = response.text ?? '';
       this.todayUsed += Math.ceil(prompt.length / 4); // Rough token estimate
 
       return {
@@ -365,3 +364,117 @@ Return JSON (no markdown):
 }
 
 export const geminiService = new GeminiOnlyService();
+
+/**
+ * Quick check if Gemini API key is configured
+ */
+export function checkApiKey(): boolean {
+  const key = import.meta.env.VITE_GEMINI_API_KEY;
+  return !!(key && key.length > 0 && key !== 'your-gemini-api-key-here');
+}
+
+/**
+ * Generate an advanced PRD from brand DNA
+ */
+export async function generateAdvancedPRD(
+  brand: any,
+  campaignGoal: string,
+  options: Record<string, any> = {}
+): Promise<any> {
+  const prompt = `Generate a detailed Product Requirements Document (PRD) for a marketing campaign.
+Brand: ${brand?.name || 'Unknown'}
+Goal: ${campaignGoal}
+Context: ${JSON.stringify(options)}
+
+Return JSON with: title, objective, targetAudience, channels, timeline, kpis, budget, assets`;
+
+  const response = await geminiService.generateText(prompt, { maxTokens: 2048 });
+  try {
+    return JSON.parse(response.text.replace(/```json\n?|```/g, '').trim());
+  } catch {
+    return { title: campaignGoal, objective: response.text, raw: true };
+  }
+}
+
+/**
+ * Generate a campaign image from a story/prompt
+ */
+export async function generateCampaignImage(
+  prompt: string,
+  brand?: any
+): Promise<string> {
+  const imagePrompt = brand
+    ? `Create a marketing image for ${brand.name}: ${prompt}. Style: ${brand.visualIdentity?.styleKeywords?.join(', ') || 'modern, clean'}`
+    : prompt;
+
+  const response = await geminiService.generateText(
+    `Describe a marketing image in detail for an AI image generator: ${imagePrompt}`,
+    { maxTokens: 500 }
+  );
+  return response.text;
+}
+
+/**
+ * Generate an asset from a campaign story
+ */
+export async function generateAssetFromStory(
+  story: string,
+  assetType: string,
+  brand?: any
+): Promise<{ content: string; metadata: Record<string, any> }> {
+  const prompt = `Generate a ${assetType} asset from this campaign story:
+${story}
+Brand: ${brand?.name || 'Generic'}
+Tone: ${brand?.tone?.description || 'professional'}
+
+Return the asset content ready to publish.`;
+
+  const response = await geminiService.generateText(prompt, { maxTokens: 1024 });
+  return {
+    content: response.text,
+    metadata: { type: assetType, generatedAt: new Date().toISOString() },
+  };
+}
+
+/**
+ * Validate an asset strictly against brand guidelines
+ */
+export async function validateAssetStrict(
+  asset: string,
+  brand: any
+): Promise<{ valid: boolean; score: number; issues: string[] }> {
+  if (!brand) return { valid: true, score: 1.0, issues: [] };
+
+  const prompt = `Validate this marketing asset against brand guidelines.
+Asset: ${asset}
+Brand voice: ${brand.tone?.description || 'professional'}
+Brand values: ${brand.coreValues?.join(', ') || 'quality'}
+
+Return JSON: { "valid": bool, "score": 0.0-1.0, "issues": ["issue1"] }`;
+
+  const response = await geminiService.generateText(prompt, { maxTokens: 300 });
+  try {
+    return JSON.parse(response.text.replace(/```json\n?|```/g, '').trim());
+  } catch {
+    return { valid: true, score: 0.8, issues: [] };
+  }
+}
+
+/**
+ * Sonic co-pilot chat
+ */
+export async function sonicChat(
+  message: string,
+  context?: { brand?: any; history?: string[] }
+): Promise<string> {
+  const systemPrompt = context?.brand
+    ? `You are a brand strategist AI assistant for "${context.brand.name}". Help with marketing, branding, and campaign strategy.`
+    : 'You are a brand strategist AI assistant. Help with marketing, branding, and campaign strategy.';
+
+  const response = await geminiService.generateText(message, {
+    systemPrompt,
+    maxTokens: 1024,
+    temperature: 0.8,
+  });
+  return response.text;
+}

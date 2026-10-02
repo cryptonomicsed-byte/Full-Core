@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useStore } from '../store';
+import { authService } from '../services/authService';
 import { 
   Dna, 
   Mail, 
@@ -21,19 +22,24 @@ const LoginPage = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [authMethod, setAuthMethod] = useState<'standard' | 'sso'>('standard');
   const navigate = useNavigate();
   const { login } = useStore();
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    // Simulate auth delay
-    setTimeout(() => {
-      setIsLoading(false);
-      login(); // Update global auth state
+    setError(null);
+    try {
+      await authService.signIn(email, password);
+      login();
       navigate('/');
-    }, 1500);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Login failed. Check your credentials.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -122,6 +128,11 @@ const LoginPage = () => {
 
             {authMethod === 'standard' ? (
               <>
+                {error && (
+                  <div className="mb-4 p-3 bg-red-900/30 border border-red-500/50 rounded-xl text-red-400 text-sm font-medium">
+                    {error}
+                  </div>
+                )}
                 <form onSubmit={handleLogin} className="space-y-4 mb-8">
                   <div className="space-y-2">
                     <label className="text-[9px] font-black text-zinc-600 uppercase tracking-[0.2em] px-1">Identity (Email)</label>

@@ -5,7 +5,7 @@ import {
   Dna, LayoutDashboard, Sparkles, Megaphone, Bot, 
   Layout as LayoutIcon, Target, Users, 
   Zap, Settings, Activity, ChevronLeft, ChevronRight,
-  LogOut
+  LogOut, CreditCard, Video, Brain
 } from 'lucide-react';
 import { SonicOrb } from './SonicOrb';
 import { ToastContainer } from './ToastContainer';
@@ -95,7 +95,10 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
           <SidebarItem collapsed={isCollapsed} to="/agents" icon={Bot} label="Agent Forge" active={location.pathname === '/agents'} />
           <SidebarItem collapsed={isCollapsed} to="/builder" icon={LayoutIcon} label="Website Builder" active={location.pathname === '/builder'} />
           <SidebarItem collapsed={isCollapsed} to="/live" icon={Users} label="Live Sessions" active={location.pathname === '/live'} />
+          <SidebarItem collapsed={isCollapsed} to="/video" icon={Video} label="Video Studio" active={location.pathname === '/video'} />
+          <SidebarItem collapsed={isCollapsed} to="/intelligence" icon={Brain} label="Intelligence Hub" active={location.pathname === '/intelligence'} />
           <SidebarItem collapsed={isCollapsed} to="/automations" icon={Zap} label="Automations & Ops" active={location.pathname === '/automations'} />
+          <SidebarItem collapsed={isCollapsed} to="/subscriptions" icon={CreditCard} label="Billing" active={location.pathname === '/subscriptions'} />
           <SidebarItem collapsed={isCollapsed} to="/settings" icon={Settings} label="Settings" active={location.pathname === '/settings'} />
         </nav>
 

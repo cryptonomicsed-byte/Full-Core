@@ -30,6 +30,10 @@ import LandingPage from './pages/LandingPage';
 import SharedProfilePage from './pages/SharedProfilePage';
 import SettingsPage from './pages/SettingsPage';
 import AdminDashboard from './pages/AdminDashboard';
+import LoginPage from './pages/LoginPage';
+import SubscriptionsPage from './pages/SubscriptionsPage';
+import VideoStudioPage from './pages/VideoStudioPage';
+import IntelligenceHubPage from './pages/IntelligenceHubPage';
 
 export default function App() {
   useEffect(() => {
@@ -109,6 +113,10 @@ export default function App() {
             <Route path="/battle" element={<BattleModePage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/admin" element={<AdminDashboard />} />
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/subscriptions" element={<SubscriptionsPage />} />
+            <Route path="/video" element={<VideoStudioPage />} />
+            <Route path="/intelligence" element={<IntelligenceHubPage />} />
             <Route path="/landing" element={<LandingPage />} />
             <Route path="/share/:id" element={<SharedProfilePage />} />
             <Route path="*" element={<Navigate to="/" replace />} />

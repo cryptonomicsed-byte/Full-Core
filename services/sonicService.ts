@@ -316,3 +316,36 @@ class SonicService {
 }
 
 export const sonicService = new SonicService();
+
+/**
+ * Get brand trends — standalone exported function used by TrendPulse component
+ */
+export async function getBrandTrends(
+  brand?: import('../types').BrandDNA,
+  force = false
+): Promise<(import('../types').TrendItem & { isSimulated?: boolean })[]> {
+  const brandName = brand?.name || 'General';
+  const keywords = brand?.coreValues || ['technology', 'innovation'];
+
+  const trendTopics = [
+    { topic: `${brandName} industry shifts`, category: 'Industry', volume: '12.5K' },
+    { topic: `AI in ${keywords[0] || 'business'}`, category: 'Technology', volume: '45.2K' },
+    { topic: `${brandName} competitor moves`, category: 'Competitive', volume: '8.1K' },
+    { topic: `Social media ${keywords[0] || 'trends'}`, category: 'Social', volume: '32.7K' },
+    { topic: `Consumer sentiment ${brandName}`, category: 'Sentiment', volume: '5.3K' },
+  ];
+
+  return trendTopics.map((t, i) => ({
+    id: `trend-${Date.now()}-${i}`,
+    topic: t.topic,
+    category: t.category,
+    volume: t.volume,
+    relevanceScore: Math.round((0.65 + Math.random() * 0.3) * 100) / 100,
+    summary: `Trending topic related to ${brandName} in the ${t.category.toLowerCase()} space.`,
+    suggestedAngles: [
+      `Create content around ${t.topic}`,
+      `Engage audience with ${t.category.toLowerCase()} insights`,
+    ],
+    isSimulated: true,
+  }));
+}

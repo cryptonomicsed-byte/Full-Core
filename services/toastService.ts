@@ -46,3 +46,4 @@ class ToastService {
 }
 
 export const toast = new ToastService();
+export const toastService = toast;

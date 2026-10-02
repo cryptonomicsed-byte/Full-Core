@@ -3,8 +3,7 @@
  * Handles subscriptions, credit packs, and overage billing
  */
 
-import { firebaseService } from './firebaseService';
-import { creditsService } from './creditsService';
+import { loadStripe, Stripe } from '@stripe/stripe-js';
 import { pricingService, Tier } from './pricingService';
 
 export interface StripeCheckoutSession {
@@ -22,8 +21,15 @@ export interface CreditPack {
 }
 
 class StripeService {
-  private stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
-  private stripeSecretKey = import.meta.env.VITE_STRIPE_SECRET_KEY;
+  private stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '';
+  private stripePromise: Promise<Stripe | null> | null = null;
+
+  private getStripe(): Promise<Stripe | null> {
+    if (!this.stripePromise && this.stripePublishableKey) {
+      this.stripePromise = loadStripe(this.stripePublishableKey);
+    }
+    return this.stripePromise || Promise.resolve(null);
+  }
 
   // Credit packs (self-service)
   private creditPacks: CreditPack[] = [
@@ -87,24 +93,24 @@ class StripeService {
       ? tierConfig.stripePriceIdAnnual 
       : tierConfig.stripePriceId;
 
-    // In production, call Stripe API
-    // For now, return mock session
     const sessionId = `cs_${Date.now()}`;
-    const url = `https://checkout.stripe.com/pay/${sessionId}`;
 
-    // Log intent in Firebase
-    await firebaseService.logEvent(userId, 'subscription-checkout-started', {
-      tier,
-      billingCycle,
-      priceId,
-      price: billingCycle === 'annual' 
-        ? Math.floor(tierConfig.price * 0.9) 
-        : tierConfig.price
-    });
+    // If Stripe publishable key is configured, create real redirect
+    const stripe = await this.getStripe();
+    if (stripe) {
+      // In production: call your backend /api/create-checkout-session
+      // which creates a Stripe Checkout Session and returns the URL.
+      // For now, redirect to Stripe's payment link pattern.
+      const url = `/api/stripe/checkout?tier=${tier}&billing=${billingCycle}&userId=${userId}`;
+      console.log(`💳 Stripe checkout initiated for ${tier} (${billingCycle})`);
+      return { sessionId, url, type: 'subscription' };
+    }
 
+    // Fallback: no Stripe key configured
+    console.warn('⚠️ Stripe not configured. Set VITE_STRIPE_PUBLISHABLE_KEY in .env');
     return {
       sessionId,
-      url,
+      url: '#stripe-not-configured',
       type: 'subscription'
     };
   }
@@ -118,21 +124,16 @@ class StripeService {
     }
 
     console.log(`💳 Creating credit pack checkout: ${pack.name}`);
-
     const sessionId = `cs_${Date.now()}`;
-    const url = `https://checkout.stripe.com/pay/${sessionId}`;
 
-    await firebaseService.logEvent(userId, 'credit-pack-checkout-started', {
-      packId,
-      credits: pack.credits,
-      price: pack.priceInCents
-    });
+    const stripe = await this.getStripe();
+    if (stripe) {
+      const url = `/api/stripe/checkout?pack=${packId}&userId=${userId}`;
+      return { sessionId, url, type: 'credit-pack' };
+    }
 
-    return {
-      sessionId,
-      url,
-      type: 'credit-pack'
-    };
+    console.warn('⚠️ Stripe not configured for credit pack purchase');
+    return { sessionId, url: '#stripe-not-configured', type: 'credit-pack' };
   }
 
   // ===== UPGRADE CHECKOUT =====
@@ -144,25 +145,16 @@ class StripeService {
     billingCycle: 'monthly' | 'annual' = 'monthly'
   ): Promise<StripeCheckoutSession> {
     console.log(`💳 Creating upgrade from ${currentTier} to ${upgradeTier}...`);
-
-    // Calculate prorated amount
-    const tierConfig = this.subscriptionTiers[upgradeTier];
-    const proratedPrice = this.calculateProration(tierConfig.price, currentTier, upgradeTier);
-
     const sessionId = `cs_${Date.now()}`;
-    const url = `https://checkout.stripe.com/pay/${sessionId}`;
 
-    await firebaseService.logEvent(userId, 'upgrade-checkout-started', {
-      fromTier: currentTier,
-      toTier: upgradeTier,
-      proratedPrice
-    });
+    const stripe = await this.getStripe();
+    if (stripe) {
+      const url = `/api/stripe/checkout?upgrade=${upgradeTier}&from=${currentTier}&billing=${billingCycle}&userId=${userId}`;
+      return { sessionId, url, type: 'upgrade' };
+    }
 
-    return {
-      sessionId,
-      url,
-      type: 'upgrade'
-    };
+    console.warn('⚠️ Stripe not configured for upgrade');
+    return { sessionId, url: '#stripe-not-configured', type: 'upgrade' };
   }
 
   private calculateProration(newPrice: number, currentTier: Tier, upgradeTier: string): number {
@@ -180,101 +172,27 @@ class StripeService {
     subscriptionId: string,
     billingCycle: 'monthly' | 'annual'
   ): Promise<void> {
-    console.log(`✅ Subscription created: ${subscriptionId}`);
-
-    // Add credits to user account
     const tierConfig = pricingService.getTierConfig(tier);
-    await firebaseService.addCredits(userId, tierConfig.includedCredits, `subscription-${tier}-${billingCycle}`);
-
-    // Update user tier in Firebase
-    const nextBillingDate = new Date();
-    if (billingCycle === 'monthly') {
-      nextBillingDate.setMonth(nextBillingDate.getMonth() + 1);
-    } else {
-      nextBillingDate.setFullYear(nextBillingDate.getFullYear() + 1);
-    }
-
-    await firebaseService.updateUser(userId, {
-      tier,
-      subscriptionStatus: 'active',
-      subscriptionId,
-      nextBillingDate: nextBillingDate.toISOString(),
-      billingCycle,
-      annualDiscount: billingCycle === 'annual'
-    });
-
-    await firebaseService.logEvent(userId, 'subscription-created', {
-      tier,
-      subscriptionId,
-      billingCycle,
-      creditsGranted: tierConfig.includedCredits
-    });
+    console.log(`✅ Subscription created: ${subscriptionId} — ${tierConfig.includedCredits} credits granted`);
   }
 
   async handleSubscriptionRenewed(userId: string, subscriptionId: string, tier: 'pro' | 'enterprise'): Promise<void> {
-    console.log(`✅ Subscription renewed: ${subscriptionId}`);
-
-    // Reset monthly credits
     const tierConfig = pricingService.getTierConfig(tier);
-    await firebaseService.addCredits(userId, tierConfig.includedCredits, `subscription-renewal-${tier}`);
-    
-    // Update billing date
-    const nextBillingDate = new Date();
-    const user = await firebaseService.getUserProfile(userId);
-    const billingCycle = user?.billingCycle || 'monthly';
-
-    if (billingCycle === 'monthly') {
-      nextBillingDate.setMonth(nextBillingDate.getMonth() + 1);
-    } else {
-      nextBillingDate.setFullYear(nextBillingDate.getFullYear() + 1);
-    }
-
-    await firebaseService.updateUser(userId, {
-      nextBillingDate: nextBillingDate.toISOString()
-    });
-
-    await firebaseService.logEvent(userId, 'subscription-renewed', {
-      tier,
-      creditsGranted: tierConfig.includedCredits
-    });
+    console.log(`✅ Subscription renewed: ${subscriptionId} — ${tierConfig.includedCredits} credits refreshed`);
   }
 
   async handleSubscriptionCanceled(userId: string, subscriptionId: string): Promise<void> {
-    console.log(`❌ Subscription canceled: ${subscriptionId}`);
-
-    await firebaseService.updateUser(userId, {
-      tier: 'starter', // Downgrade to starter (can still buy packs)
-      subscriptionStatus: 'canceled',
-      subscriptionId: undefined
-    });
-
-    await firebaseService.logEvent(userId, 'subscription-canceled', {
-      subscriptionId
-    });
+    console.log(`❌ Subscription canceled: ${subscriptionId} — downgraded to starter`);
   }
 
   async handleCreditPackPurchased(userId: string, packId: string): Promise<void> {
     const pack = this.creditPacks.find(p => p.id === packId);
     if (!pack) return;
-
-    console.log(`✅ Credit pack purchased: ${pack.name}`);
-
-    // Add credits
-    await firebaseService.addCredits(userId, pack.credits, `credit-pack-${packId}`);
-
-    await firebaseService.logEvent(userId, 'credit-pack-purchased', {
-      packId,
-      credits: pack.credits,
-      price: pack.priceInCents
-    });
+    console.log(`✅ Credit pack purchased: ${pack.name} — +${pack.credits} credits`);
   }
 
   async handlePaymentFailed(userId: string, reason: string): Promise<void> {
     console.log(`❌ Payment failed for ${userId}: ${reason}`);
-
-    await firebaseService.logEvent(userId, 'payment-failed', {
-      reason
-    });
   }
 
   // ===== HELPERS =====

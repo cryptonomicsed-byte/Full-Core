@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Check, Zap, Crown, Sparkles } from 'lucide-react';
 import { creditSystemService } from '../services/creditSystemService';
-import { toastService } from '../services/toastService';
+import { toast as toastService } from '../services/toastService';
 
 type SubscriptionTier = 'starter' | 'pro' | 'enterprise';
 

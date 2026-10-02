@@ -22,8 +22,10 @@
     "@google/genai": "^1.35.0",
     "@sentry/react": "^10.38.0",
     "@sentry/tracing": "^7.120.4",
+    "@stripe/stripe-js": "^8.10.0",
     "@supabase/supabase-js": "^2.90.0",
     "fastify": "^4.29.1",
+    "firebase": "^12.10.0",
     "framer-motion": "^12.23.26",
     "html2canvas": "^1.4.1",
     "jspdf": "^3.0.4",
@@ -33,6 +35,7 @@
     "react-dom": "^19.2.3",
     "react-router-dom": "^7.12.0",
     "recharts": "^3.6.0",
+    "stripe": "^20.4.1",
     "zustand": "^5.0.10"
   },
   "devDependencies": {
